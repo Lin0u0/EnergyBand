@@ -1,0 +1,17 @@
+{
+  "name": "oled-energy-band",
+  "version": "1.0.0",
+  "description": "专业的 OLED 有机发光二极管能带图绘制工具",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["OLED", "energy-band", "diagram"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^7.3.1"
+  }
+}

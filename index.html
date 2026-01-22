@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OLED 能带图绘制工具</title>
+    <meta name="description" content="专业的 OLED 有机发光二极管能带图绘制工具，支持共蒸发配置">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- 顶部导航 -->
+        <header class="app-header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect x="2" y="8" width="28" height="16" rx="2" stroke="currentColor" stroke-width="2" />
+                    <path d="M8 12 L8 20 M12 14 L12 20 M16 10 L16 20 M20 12 L20 20 M24 14 L24 20"
+                        stroke="url(#gradient)" stroke-width="2" stroke-linecap="round" />
+                    <defs>
+                        <linearGradient id="gradient" x1="8" y1="10" x2="24" y2="20">
+                            <stop offset="0%" stop-color="#6366f1" />
+                            <stop offset="100%" stop-color="#8b5cf6" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <h1>OLED 能带图工具</h1>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-ghost" id="saveConfig">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <polyline points="17,21 17,13 7,13 7,21" />
+                        <polyline points="7,3 7,8 15,8" />
+                    </svg>
+                    保存配置
+                </button>
+                <button class="btn btn-ghost" id="loadConfig">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17,8 12,3 7,8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    导入配置
+                </button>
+                <input type="file" id="configFileInput" accept=".json" style="display: none;">
+                <button class="btn btn-ghost" id="exportPng">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7,10 12,15 17,10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    导出 PNG
+                </button>
+                <button class="btn btn-ghost" id="exportSvg">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14,2 14,8 20,8" />
+                    </svg>
+                    导出 SVG
+                </button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- 左侧面板：器件配置 -->
+            <aside class="sidebar">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>器件结构</h2>
+                        <button class="btn btn-primary btn-sm" id="addLayer">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            添加层
+                        </button>
+                    </div>
+                    <div class="layers-list" id="layersList">
+                        <!-- 动态生成的层列表 -->
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>材料库</h2>
+                        <input type="text" class="search-input" id="materialSearch" placeholder="搜索材料...">
+                    </div>
+                    <div class="material-categories">
+                        <button class="category-btn active" data-category="all">全部</button>
+                        <button class="category-btn" data-category="hil">HIL</button>
+                        <button class="category-btn" data-category="htl">HTL</button>
+                        <button class="category-btn" data-category="ebl">EBL</button>
+                        <button class="category-btn" data-category="eml">EML</button>
+                        <button class="category-btn" data-category="hbl">HBL</button>
+                        <button class="category-btn" data-category="etl">ETL</button>
+                        <button class="category-btn" data-category="eil">EIL</button>
+                        <button class="category-btn" data-category="electrode">电极</button>
+                    </div>
+                    <div class="materials-list" id="materialsList">
+                        <!-- 动态生成的材料列表 -->
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>显示设置</h2>
+                    </div>
+                    <div class="settings-content">
+                        <label class="setting-item">
+                            <span>显示功函数/电子亲和能</span>
+                            <input type="checkbox" id="showWorkFunction" checked>
+                        </label>
+                        <label class="setting-item">
+                            <span>显示材料名称</span>
+                            <input type="checkbox" id="showMaterialName" checked>
+                        </label>
+                        <label class="setting-item">
+                            <span>显示能级数值</span>
+                            <input type="checkbox" id="showEnergyValues" checked>
+                        </label>
+                        <label class="setting-item">
+                            <span>显示层厚度</span>
+                            <input type="checkbox" id="showThickness" checked>
+                        </label>
+                        <label class="setting-item">
+                            <span>显示三线态能级 (T₁)</span>
+                            <input type="checkbox" id="showTriplet" checked>
+                        </label>
+                        <label class="setting-item">
+                            <span>真空能级对齐</span>
+                            <input type="checkbox" id="vacuumAlign">
+                        </label>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 中间：能带图可视化 -->
+            <section class="canvas-area">
+                <div class="canvas-container" id="canvasContainer">
+                    <canvas id="energyBandCanvas"></canvas>
+                </div>
+                <div class="canvas-controls">
+                    <button class="btn btn-icon" id="zoomIn" title="放大">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            <line x1="11" y1="8" x2="11" y2="14" />
+                            <line x1="8" y1="11" x2="14" y2="11" />
+                        </svg>
+                    </button>
+                    <button class="btn btn-icon" id="zoomOut" title="缩小">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            <line x1="8" y1="11" x2="14" y2="11" />
+                        </svg>
+                    </button>
+                    <button class="btn btn-icon" id="resetView" title="重置视图">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                        </svg>
+                    </button>
+                </div>
+            </section>
+
+            <!-- 右侧面板：层详情编辑 -->
+            <aside class="sidebar sidebar-right" id="layerDetailPanel">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>层详情</h2>
+                        <button class="btn btn-icon btn-ghost" id="closeDetail">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="layer-detail-content" id="layerDetailContent">
+                        <p class="empty-state">选择一个层以查看详情</p>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- 添加层模态框 -->
+        <div class="modal" id="addLayerModal">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>添加新层</h3>
+                    <button class="btn btn-icon btn-ghost modal-close">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>层类型</label>
+                        <select id="newLayerType" class="form-select">
+                            <option value="anode">阳极 (Anode)</option>
+                            <option value="hil">空穴注入层 (HIL)</option>
+                            <option value="htl">空穴传输层 (HTL)</option>
+                            <option value="ebl">电子阻挡层 (EBL)</option>
+                            <option value="eml" selected>发光层 (EML)</option>
+                            <option value="hbl">空穴阻挡层 (HBL)</option>
+                            <option value="etl">电子传输层 (ETL)</option>
+                            <option value="eil">电子注入层 (EIL)</option>
+                            <option value="cathode">阴极 (Cathode)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>主体材料</label>
+                        <select id="newLayerMaterial" class="form-select">
+                            <!-- 动态填充 -->
+                        </select>
+                    </div>
+                    <div class="form-group" id="coevaporationGroup">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableCoevaporation">
+                            <span>启用共蒸发</span>
+                        </label>
+                    </div>
+                    <div class="coevaporation-config" id="coevaporationConfig" style="display: none;">
+                        <div class="form-group">
+                            <label>掺杂材料 1</label>
+                            <div class="dopant-row">
+                                <select id="dopant1Material" class="form-select">
+                                    <!-- 动态填充 -->
+                                </select>
+                                <input type="number" id="dopant1Ratio" class="form-input" placeholder="比例 %" min="0"
+                                    max="100" value="10">
+                            </div>
+                        </div>
+                        <div class="form-group" id="dopant2Group">
+                            <label>掺杂材料 2 (可选)</label>
+                            <div class="dopant-row">
+                                <select id="dopant2Material" class="form-select">
+                                    <option value="">不使用</option>
+                                    <!-- 动态填充 -->
+                                </select>
+                                <input type="number" id="dopant2Ratio" class="form-input" placeholder="比例 %" min="0"
+                                    max="100" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>层厚度 (nm)</label>
+                        <input type="number" id="newLayerThickness" class="form-input" value="30" min="1" max="1000">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost modal-close">取消</button>
+                    <button class="btn btn-primary" id="confirmAddLayer">添加</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 自定义材料模态框 -->
+        <div class="modal" id="customMaterialModal">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>添加自定义材料</h3>
+                    <button class="btn btn-icon btn-ghost modal-close">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>材料名称</label>
+                        <input type="text" id="customMaterialName" class="form-input" placeholder="例如: CBP">
+                    </div>
+                    <div class="form-group">
+                        <label>HOMO (eV)</label>
+                        <input type="number" id="customMaterialHomo" class="form-input" placeholder="-6.0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>LUMO (eV)</label>
+                        <input type="number" id="customMaterialLumo" class="form-input" placeholder="-2.5" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>三线态能级 T₁ (eV, 可选)</label>
+                        <input type="number" id="customMaterialT1" class="form-input" placeholder="2.6" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>材料类型</label>
+                        <select id="customMaterialType" class="form-select">
+                            <option value="host">主体材料 (Host)</option>
+                            <option value="dopant">掺杂材料 (Dopant)</option>
+                            <option value="htl">空穴传输材料</option>
+                            <option value="etl">电子传输材料</option>
+                            <option value="electrode">电极材料</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost modal-close">取消</button>
+                    <button class="btn btn-primary" id="confirmAddMaterial">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/app.js"></script>
+</body>
+
+</html>
