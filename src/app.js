@@ -90,7 +90,67 @@ class OLEDEnergyBandApp {
 
         this.toast = new Toast();
 
+        // Initialize theme
+        this.initTheme();
+
         this.init();
+    }
+
+    // ===== Theme Management =====
+    initTheme() {
+        // Check for saved theme preference or default to system preference
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+        this.updateThemeIcons();
+    }
+
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        let newTheme;
+        
+        if (currentTheme === 'dark') {
+            newTheme = 'light';
+        } else if (currentTheme === 'light') {
+            newTheme = 'dark';
+        } else {
+            // No explicit theme set, check system preference
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            newTheme = prefersDark ? 'light' : 'dark';
+        }
+        
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        this.updateThemeIcons();
+        this.render();
+    }
+
+    updateThemeIcons() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const lightIcon = document.querySelector('.theme-icon-light');
+        const darkIcon = document.querySelector('.theme-icon-dark');
+        
+        if (!lightIcon || !darkIcon) return;
+        
+        // Determine if we're in light mode
+        let isLight;
+        if (currentTheme === 'light') {
+            isLight = true;
+        } else if (currentTheme === 'dark') {
+            isLight = false;
+        } else {
+            // Default to system preference
+            isLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+        }
+        
+        if (isLight) {
+            lightIcon.style.display = 'none';
+            darkIcon.style.display = 'block';
+        } else {
+            lightIcon.style.display = 'block';
+            darkIcon.style.display = 'none';
+        }
     }
 
     init() {
@@ -118,6 +178,9 @@ class OLEDEnergyBandApp {
     }
 
     bindEvents() {
+        // 主题切换
+        document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
+
         // 一次性绑定的事件
         document.getElementById('addLayer').addEventListener('click', () => this.openAddLayerModal());
         document.getElementById('confirmAddLayer').addEventListener('click', () => this.addLayerFromModal());
@@ -781,11 +844,16 @@ class OLEDEnergyBandApp {
         const width = this.canvas.width / dpr;
         const height = this.canvas.height / dpr;
 
-        ctx.fillStyle = '#0f0f1a';
+        // Get computed styles for canvas colors
+        const computedStyle = getComputedStyle(document.documentElement);
+        const canvasBg = computedStyle.getPropertyValue('--canvas-bg').trim() || '#0f0f1a';
+        const canvasText = computedStyle.getPropertyValue('--canvas-text').trim() || '#a0a0b5';
+        
+        ctx.fillStyle = canvasBg;
         ctx.fillRect(0, 0, width, height);
 
         if (this.layers.length === 0) {
-            ctx.fillStyle = '#6b6b80';
+            ctx.fillStyle = canvasText;
             ctx.font = `16px ${CONFIG.FONT_FAMILY}`;
             ctx.textAlign = 'center';
             ctx.fillText('添加器件层以生成能带图', width / 2, height / 2);
@@ -830,7 +898,9 @@ class OLEDEnergyBandApp {
     }
 
     drawGrid(ctx, startX, totalWidth, layerHeight, energyToY, minEnergy, maxEnergy) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        const computedStyle = getComputedStyle(document.documentElement);
+        const gridColor = computedStyle.getPropertyValue('--canvas-grid').trim() || 'rgba(255, 255, 255, 0.05)';
+        ctx.strokeStyle = gridColor;
         ctx.lineWidth = 1;
         for (let e = Math.floor(maxEnergy); e <= Math.ceil(minEnergy); e++) {
             const y = energyToY(e);
@@ -842,7 +912,11 @@ class OLEDEnergyBandApp {
     }
 
     drawEnergyAxis(ctx, x, layerHeight, energyToY, minEnergy, maxEnergy) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        const computedStyle = getComputedStyle(document.documentElement);
+        const axisColor = computedStyle.getPropertyValue('--canvas-axis').trim() || 'rgba(255, 255, 255, 0.3)';
+        const axisTextColor = computedStyle.getPropertyValue('--text-secondary').trim() || '#a0a0b5';
+        
+        ctx.strokeStyle = axisColor;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(x, energyToY(minEnergy) - 10);
@@ -854,13 +928,13 @@ class OLEDEnergyBandApp {
         ctx.lineTo(x - 5, energyToY(maxEnergy) + 20);
         ctx.lineTo(x + 5, energyToY(maxEnergy) + 20);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fillStyle = axisColor;
         ctx.fill();
 
         ctx.font = `11px ${CONFIG.FONT_FAMILY}`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#a0a0b5';
+        ctx.fillStyle = axisTextColor;
 
         for (let e = Math.floor(maxEnergy); e <= Math.ceil(minEnergy); e++) {
             const y = energyToY(e);
@@ -930,7 +1004,9 @@ class OLEDEnergyBandApp {
 
             // 材料名称写在能级线前面（左侧）- 不旋转
             if (this.settings.showMaterialName) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                const computedStyle = getComputedStyle(document.documentElement);
+                const textColor = computedStyle.getPropertyValue('--text-primary').trim() || '#f0f0f5';
+                ctx.fillStyle = textColor;
                 ctx.font = `bold 10px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
@@ -948,7 +1024,9 @@ class OLEDEnergyBandApp {
 
             // 厚度（在材料名称下方）
             if (this.settings.showThickness) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                const computedStyle = getComputedStyle(document.documentElement);
+                const textColor = computedStyle.getPropertyValue('--text-secondary').trim() || '#a0a0b5';
+                ctx.fillStyle = textColor;
                 ctx.font = `9px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
@@ -1042,10 +1120,12 @@ class OLEDEnergyBandApp {
                 if (this.settings.showMaterialName) {
                     const dopantCenterY = (dopantHomoY + dopantLumoY) / 2;
                     const dopantCenterX = innerX + innerWidth / 2;
+                    const computedStyle = getComputedStyle(document.documentElement);
+                    const textColor = computedStyle.getPropertyValue('--text-primary').trim() || '#f0f0f5';
                     ctx.save();
                     ctx.translate(dopantCenterX, dopantCenterY);
                     ctx.rotate(-Math.PI / 2);
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                    ctx.fillStyle = textColor;
                     ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
@@ -1079,7 +1159,9 @@ class OLEDEnergyBandApp {
                 textX = innerX + innerWidth / 2;
             }
 
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            const computedStyle = getComputedStyle(document.documentElement);
+            const textColor = computedStyle.getPropertyValue('--text-secondary').trim() || '#a0a0b5';
+            ctx.fillStyle = textColor;
             ctx.font = `9px ${CONFIG.FONT_FAMILY}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
@@ -1092,12 +1174,14 @@ class OLEDEnergyBandApp {
             const hostLumoY = energyToY(hostMat.lumo);
 
             if (this.settings.showMaterialName) {
+                const computedStyle = getComputedStyle(document.documentElement);
+                const textColor = computedStyle.getPropertyValue('--text-primary').trim() || '#f0f0f5';
                 if (dopantMats.length > 0) {
                     const leftSpaceCenter = x + ((width - 4) * (1 - CONFIG.DOPANT_WIDTH_RATIO)) / 2;
                     ctx.save();
                     ctx.translate(leftSpaceCenter, (hostHomoY + hostLumoY) / 2);
                     ctx.rotate(-Math.PI / 2);
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.fillStyle = textColor;
                     ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
@@ -1105,7 +1189,7 @@ class OLEDEnergyBandApp {
                     ctx.restore();
                 } else {
                     const fillCenterY = (hostHomoY + hostLumoY) / 2;
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.fillStyle = textColor;
                     ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
@@ -1160,7 +1244,9 @@ class OLEDEnergyBandApp {
             // 材料名称
             if (this.settings.showMaterialName) {
                 const fillCenterY = (homoY + lumoY) / 2;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                const computedStyle = getComputedStyle(document.documentElement);
+                const textColor = computedStyle.getPropertyValue('--text-primary').trim() || '#f0f0f5';
+                ctx.fillStyle = textColor;
                 ctx.font = `bold 10px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -1195,7 +1281,9 @@ class OLEDEnergyBandApp {
             // 厚度
             if (this.settings.showThickness) {
                 const fillCenterY = (homoY + lumoY) / 2;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                const computedStyle = getComputedStyle(document.documentElement);
+                const textColor = computedStyle.getPropertyValue('--text-secondary').trim() || '#a0a0b5';
+                ctx.fillStyle = textColor;
                 ctx.font = `9px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
@@ -1204,6 +1292,9 @@ class OLEDEnergyBandApp {
         } else if (mat.workFunction) {
             // 处理像 LiF 这样只有功函数的材料
             const wfY = energyToY(mat.workFunction);
+            const computedStyle = getComputedStyle(document.documentElement);
+            const textPrimary = computedStyle.getPropertyValue('--text-primary').trim() || '#f0f0f5';
+            const textSecondary = computedStyle.getPropertyValue('--text-secondary').trim() || '#a0a0b5';
 
             // 半透明填充 - 去掉
             // const alpha = isSelected ? 0.4 : 0.25;
@@ -1226,7 +1317,7 @@ class OLEDEnergyBandApp {
             // 材料名称
             if (this.settings.showMaterialName) {
                 const textY = wfY - 8;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.fillStyle = textPrimary;
                 ctx.font = 'bold 10px Inter, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
@@ -1244,7 +1335,7 @@ class OLEDEnergyBandApp {
 
             // 厚度
             if (this.settings.showThickness) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.fillStyle = textSecondary;
                 ctx.font = '9px Inter, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';

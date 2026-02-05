@@ -1,5 +1,6 @@
 /* ===== CSS Variables ===== */
 :root {
+    /* Dark theme (default) */
     --bg-primary: #0f0f1a;
     --bg-secondary: #1a1a2e;
     --bg-tertiary: #252542;
@@ -17,6 +18,10 @@
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
     --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
+    --canvas-bg: #0f0f1a;
+    --canvas-text: #a0a0b5;
+    --canvas-grid: rgba(255, 255, 255, 0.05);
+    --canvas-axis: rgba(255, 255, 255, 0.3);
     --homo-color: #ef4444;
     --lumo-color: #3b82f6;
     --vacuum-color: #10b981;
@@ -38,6 +43,58 @@
     --border-radius-lg: 16px;
     --transition-fast: 150ms ease;
     --transition-normal: 250ms ease;
+}
+
+/* Light theme */
+[data-theme="light"] {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f1f5f9;
+    --bg-elevated: #e2e8f0;
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
+    --text-tertiary: #94a3b8;
+    --accent-primary: #6366f1;
+    --accent-primary-hover: #4f46e5;
+    --accent-secondary: #8b5cf6;
+    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    --border-color: rgba(0, 0, 0, 0.08);
+    --border-color-hover: rgba(0, 0, 0, 0.15);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.25);
+    --canvas-bg: #f8fafc;
+    --canvas-text: #475569;
+    --canvas-grid: rgba(0, 0, 0, 0.06);
+    --canvas-axis: rgba(0, 0, 0, 0.3);
+}
+
+/* System preference - light mode */
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        --bg-primary: #f8fafc;
+        --bg-secondary: #ffffff;
+        --bg-tertiary: #f1f5f9;
+        --bg-elevated: #e2e8f0;
+        --text-primary: #1e293b;
+        --text-secondary: #475569;
+        --text-tertiary: #94a3b8;
+        --accent-primary: #6366f1;
+        --accent-primary-hover: #4f46e5;
+        --accent-secondary: #8b5cf6;
+        --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        --border-color: rgba(0, 0, 0, 0.08);
+        --border-color-hover: rgba(0, 0, 0, 0.15);
+        --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+        --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+        --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+        --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.25);
+        --canvas-bg: #f8fafc;
+        --canvas-text: #475569;
+        --canvas-grid: rgba(0, 0, 0, 0.06);
+        --canvas-axis: rgba(0, 0, 0, 0.3);
+    }
 }
 
 *,
@@ -102,6 +159,17 @@ body {
 .header-actions {
     display: flex;
     gap: 0.75rem;
+}
+
+/* Theme toggle button icons */
+#themeToggle .theme-icon-light,
+#themeToggle .theme-icon-dark {
+    transition: transform var(--transition-fast);
+}
+
+#themeToggle:hover .theme-icon-light,
+#themeToggle:hover .theme-icon-dark {
+    transform: rotate(15deg);
 }
 
 .main-content {
@@ -312,28 +380,53 @@ body {
 }
 
 .material-tag.host {
-    background: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
+    background: rgba(34, 197, 94, 0.15);
+    color: #16a34a;
+}
+
+[data-theme="light"] .material-tag.host {
+    background: rgba(34, 197, 94, 0.12);
+    color: #15803d;
 }
 
 .material-tag.dopant {
-    background: rgba(139, 92, 246, 0.2);
-    color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.15);
+    color: #9333ea;
+}
+
+[data-theme="light"] .material-tag.dopant {
+    background: rgba(139, 92, 246, 0.12);
+    color: #7c3aed;
 }
 
 .material-tag.htl {
-    background: rgba(244, 114, 182, 0.2);
-    color: #f472b6;
+    background: rgba(244, 114, 182, 0.15);
+    color: #db2777;
+}
+
+[data-theme="light"] .material-tag.htl {
+    background: rgba(244, 114, 182, 0.12);
+    color: #be185d;
 }
 
 .material-tag.etl {
-    background: rgba(96, 165, 250, 0.2);
-    color: #60a5fa;
+    background: rgba(96, 165, 250, 0.15);
+    color: #2563eb;
+}
+
+[data-theme="light"] .material-tag.etl {
+    background: rgba(96, 165, 250, 0.12);
+    color: #1d4ed8;
 }
 
 .material-tag.electrode {
-    background: rgba(245, 158, 11, 0.2);
-    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+}
+
+[data-theme="light"] .material-tag.electrode {
+    background: rgba(245, 158, 11, 0.12);
+    color: #b45309;
 }
 
 .layers-list {
