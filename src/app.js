@@ -11,6 +11,60 @@ import {
 
 import './styles.css';
 
+// ===== 配置常量 =====
+const CONFIG = {
+    LAYER_HEIGHT: 280,
+    ELECTRODE_WIDTH: 80,
+    ORGANIC_LAYER_MIN_WIDTH: 50,
+    THICKNESS_SCALE: 1.0,
+    DOPANT_WIDTH_RATIO: 0.65,
+    DOPANT_RIGHT_PADDING: 4,
+    ZOOM_MIN: 0.3,
+    ZOOM_MAX: 3,
+    ZOOM_STEP: 1.2,
+    FONT_FAMILY: 'Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, sans-serif',
+    COLORS: {
+        HOMO: '#ef4444',
+        LUMO: '#3b82f6',
+        TRIPLET: '#8b5cf6',
+        WORK_FUNCTION: '#f59e0b',
+        DOPANT_COLORS: ['#ec4899', '#a855f7', '#06b6d4']
+    }
+};
+
+// ===== 工具函数 =====
+function debounce(fn, delay = 100) {
+    let timer = null;
+    return function (...args) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+// Toast 提示组件
+class Toast {
+    constructor() {
+        this.container = document.createElement('div');
+        this.container.className = 'toast-container';
+        document.body.appendChild(this.container);
+    }
+
+    show(message, type = 'info', duration = 3000) {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        this.container.appendChild(toast);
+
+        // 触发动画
+        requestAnimationFrame(() => toast.classList.add('show'));
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+}
+
 class OLEDEnergyBandApp {
     constructor() {
         this.layers = [];
@@ -22,6 +76,8 @@ class OLEDEnergyBandApp {
         this.panY = 0;
         this.isDragging = false;
         this.lastMousePos = { x: 0, y: 0 };
+        this.draggedLayerId = null;
+        this.eventListeners = new Map(); // 用于存储动态绑定的事件监听器
 
         this.settings = {
             showWorkFunction: true,
@@ -31,6 +87,8 @@ class OLEDEnergyBandApp {
             showTriplet: true,
             vacuumAlign: false,
         };
+
+        this.toast = new Toast();
 
         this.init();
     }
@@ -44,7 +102,7 @@ class OLEDEnergyBandApp {
     }
 
     setupCanvas() {
-        const resize = () => {
+        const resize = debounce(() => {
             const container = document.getElementById('canvasContainer');
             const dpr = window.devicePixelRatio || 1;
             this.canvas.width = container.clientWidth * dpr;
@@ -53,12 +111,14 @@ class OLEDEnergyBandApp {
             this.canvas.style.height = container.clientHeight + 'px';
             this.ctx.scale(dpr, dpr);
             this.render();
-        };
+        }, 100);
+
         resize();
         window.addEventListener('resize', resize);
     }
 
     bindEvents() {
+        // 一次性绑定的事件
         document.getElementById('addLayer').addEventListener('click', () => this.openAddLayerModal());
         document.getElementById('confirmAddLayer').addEventListener('click', () => this.addLayerFromModal());
 
@@ -82,10 +142,10 @@ class OLEDEnergyBandApp {
             });
         });
 
-        document.getElementById('materialSearch').addEventListener('input', (e) => {
+        document.getElementById('materialSearch').addEventListener('input', debounce((e) => {
             const activeCategory = document.querySelector('.category-btn.active').dataset.category;
             this.renderMaterialsList(activeCategory, e.target.value);
-        });
+        }, 150));
 
         ['showWorkFunction', 'showMaterialName', 'showEnergyValues', 'showThickness', 'showTriplet', 'vacuumAlign'].forEach(id => {
             const el = document.getElementById(id);
@@ -97,16 +157,28 @@ class OLEDEnergyBandApp {
             }
         });
 
-        this.canvas.addEventListener('wheel', (e) => this.handleWheel(e));
+        // Canvas 交互
+        this.canvas.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.canvas.addEventListener('mouseup', () => this.handleMouseUp());
         this.canvas.addEventListener('mouseleave', () => this.handleMouseUp());
 
-        document.getElementById('zoomIn').addEventListener('click', () => { this.zoom = Math.min(3, this.zoom * 1.2); this.render(); });
-        document.getElementById('zoomOut').addEventListener('click', () => { this.zoom = Math.max(0.3, this.zoom / 1.2); this.render(); });
-        document.getElementById('resetView').addEventListener('click', () => { this.zoom = 1; this.panX = 0; this.panY = 0; this.render(); });
+        // 缩放控制
+        document.getElementById('zoomIn').addEventListener('click', () => { 
+            this.zoom = Math.min(CONFIG.ZOOM_MAX, this.zoom * CONFIG.ZOOM_STEP); 
+            this.render(); 
+        });
+        document.getElementById('zoomOut').addEventListener('click', () => { 
+            this.zoom = Math.max(CONFIG.ZOOM_MIN, this.zoom / CONFIG.ZOOM_STEP); 
+            this.render(); 
+        });
+        document.getElementById('resetView').addEventListener('click', () => { 
+            this.zoom = 1; this.panX = 0; this.panY = 0; 
+            this.render(); 
+        });
 
+        // 导出和配置
         document.getElementById('exportPng').addEventListener('click', () => this.exportPNG());
         document.getElementById('exportSvg').addEventListener('click', () => this.exportSVG());
 
@@ -116,13 +188,59 @@ class OLEDEnergyBandApp {
             this.renderLayerDetail();
         });
 
+        // 自定义材料 - 只绑定一次
         document.getElementById('confirmAddMaterial').addEventListener('click', () => this.addCustomMaterial());
 
+        // 配置保存/加载
         document.getElementById('saveConfig').addEventListener('click', () => this.saveConfig());
         document.getElementById('loadConfig').addEventListener('click', () => {
             document.getElementById('configFileInput').click();
         });
         document.getElementById('configFileInput').addEventListener('change', (e) => this.loadConfig(e));
+
+        // 键盘快捷键
+        this.bindKeyboardShortcuts();
+    }
+
+    bindKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Delete 删除选中层
+            if (e.key === 'Delete' && this.selectedLayerId) {
+                this.deleteLayer(this.selectedLayerId);
+            }
+            // Ctrl/Cmd + S 保存配置
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                this.saveConfig();
+            }
+            // Ctrl/Cmd + O 导入配置
+            if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+                e.preventDefault();
+                document.getElementById('configFileInput').click();
+            }
+            // Ctrl/Cmd + Plus 放大
+            if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+                e.preventDefault();
+                this.zoom = Math.min(CONFIG.ZOOM_MAX, this.zoom * CONFIG.ZOOM_STEP);
+                this.render();
+            }
+            // Ctrl/Cmd + Minus 缩小
+            if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+                e.preventDefault();
+                this.zoom = Math.max(CONFIG.ZOOM_MIN, this.zoom / CONFIG.ZOOM_STEP);
+                this.render();
+            }
+            // Ctrl/Cmd + 0 重置视图
+            if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+                e.preventDefault();
+                this.zoom = 1; this.panX = 0; this.panY = 0;
+                this.render();
+            }
+            // Escape 关闭模态框
+            if (e.key === 'Escape') {
+                this.closeAllModals();
+            }
+        });
     }
 
     loadDefaultDevice() {
@@ -269,7 +387,8 @@ class OLEDEnergyBandApp {
             <div class="detail-section">
                 <div class="detail-section-title">厚度</div>
                 <div class="form-group" style="margin-bottom: 0;">
-                    <input type="number" class="form-input" id="layerThicknessInput" value="${layer.thickness}" min="1" max="1000">
+                    <input type="number" class="form-input" id="layerThicknessInput" 
+                        value="${layer.thickness}" min="1" max="1000" data-layer-id="${layer.id}">
                 </div>
             </div>
             <div class="detail-section">
@@ -297,11 +416,32 @@ class OLEDEnergyBandApp {
         html += '</div>';
         container.innerHTML = html;
 
-        document.getElementById('layerThicknessInput').addEventListener('change', (e) => {
-            layer.thickness = parseInt(e.target.value) || 1;
-            this.renderLayersList();
-            this.render();
-        });
+        // 使用事件委托，只绑定一次
+        const thicknessInput = document.getElementById('layerThicknessInput');
+        if (thicknessInput && !thicknessInput._hasListener) {
+            thicknessInput._hasListener = true;
+            thicknessInput.addEventListener('change', (e) => {
+                const layerId = e.target.dataset.layerId;
+                const targetLayer = this.layers.find(l => l.id === layerId);
+                if (targetLayer) {
+                    const newValue = parseInt(e.target.value);
+                    if (isNaN(newValue) || newValue < 1) {
+                        this.toast.show('厚度必须大于 0', 'error');
+                        e.target.value = targetLayer.thickness;
+                        return;
+                    }
+                    if (newValue > 1000) {
+                        this.toast.show('厚度不能超过 1000nm', 'error');
+                        e.target.value = targetLayer.thickness;
+                        return;
+                    }
+                    targetLayer.thickness = newValue;
+                    this.renderLayersList();
+                    this.render();
+                    this.toast.show('厚度已更新', 'success');
+                }
+            });
+        }
     }
 
     renderMaterialsList(category, searchQuery = '') {
@@ -415,14 +555,37 @@ class OLEDEnergyBandApp {
     }
 
     addCustomMaterial() {
-        const name = document.getElementById('customMaterialName').value.trim();
-        const homo = parseFloat(document.getElementById('customMaterialHomo').value);
-        const lumo = parseFloat(document.getElementById('customMaterialLumo').value);
-        const t1 = parseFloat(document.getElementById('customMaterialT1').value) || null;
-        const type = document.getElementById('customMaterialType').value;
+        const nameInput = document.getElementById('customMaterialName');
+        const homoInput = document.getElementById('customMaterialHomo');
+        const lumoInput = document.getElementById('customMaterialLumo');
+        const t1Input = document.getElementById('customMaterialT1');
+        const typeInput = document.getElementById('customMaterialType');
 
-        if (!name) { alert('请输入材料名称'); return; }
-        if (isNaN(homo) && isNaN(lumo)) { alert('请至少输入 HOMO 或 LUMO 能级'); return; }
+        const name = nameInput.value.trim();
+        const homo = parseFloat(homoInput.value);
+        const lumo = parseFloat(lumoInput.value);
+        const t1 = parseFloat(t1Input.value) || null;
+        const type = typeInput.value;
+
+        // 验证
+        const errors = [];
+        if (!name) errors.push('请输入材料名称');
+        if (isNaN(homo) && isNaN(lumo)) errors.push('请至少输入 HOMO 或 LUMO 能级');
+        if (!isNaN(homo) && (homo > 0 || homo < -15)) errors.push('HOMO 能级应在 -15 ~ 0 eV 之间');
+        if (!isNaN(lumo) && (lumo > 0 || lumo < -15)) errors.push('LUMO 能级应在 -15 ~ 0 eV 之间');
+        if (t1 !== null && (t1 < 0 || t1 > 10)) errors.push('三线态能级应在 0 ~ 10 eV 之间');
+
+        if (errors.length > 0) {
+            this.toast.show(errors[0], 'error');
+            return;
+        }
+
+        // 检查是否已存在同名材料
+        const existingMaterial = getAllMaterials().find(m => m.name.toLowerCase() === name.toLowerCase());
+        if (existingMaterial) {
+            this.toast.show(`材料 "${name}" 已存在`, 'error');
+            return;
+        }
 
         const newMaterial = {
             id: 'custom_' + Math.random().toString(36).substr(2, 9),
@@ -437,26 +600,60 @@ class OLEDEnergyBandApp {
         MATERIALS_DATABASE.custom.push(newMaterial);
         this.closeAllModals();
         this.renderMaterialsList('all');
+        
+        // 重置表单
+        nameInput.value = '';
+        homoInput.value = '';
+        lumoInput.value = '';
+        t1Input.value = '';
+        typeInput.value = 'host';
+        
+        this.toast.show(`材料 "${name}" 添加成功`, 'success');
     }
 
     closeAllModals() {
         document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
     }
 
-    // 拖拽相关
+    // ===== 拖拽相关 =====
     handleDragStart(e, item) {
         this.draggedLayerId = item.dataset.id;
+        this.draggedItem = item;
         item.classList.add('dragging');
+        item.setAttribute('draggable', 'true');
+        
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', item.dataset.id);
-        setTimeout(() => { item.style.opacity = '0.4'; }, 0);
+        
+        // 设置拖拽图像（可选，使用默认）
+        // 延迟设置透明度以确保拖拽图像正常显示
+        requestAnimationFrame(() => {
+            item.style.opacity = '0.4';
+        });
+        
+        // 添加拖拽时的视觉反馈
+        document.querySelectorAll('.layer-item').forEach(el => {
+            if (el !== item) {
+                el.style.transition = 'transform 0.2s ease';
+            }
+        });
     }
 
     handleDragOver(e, item) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        if (item.dataset.id !== this.draggedLayerId) {
-            document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('drag-over'));
+        
+        if (item.dataset.id === this.draggedLayerId) return;
+        
+        // 移除其他项的高亮
+        document.querySelectorAll('.layer-item').forEach(el => {
+            if (el !== item && el.classList.contains('drag-over')) {
+                el.classList.remove('drag-over');
+            }
+        });
+        
+        // 添加当前项的高亮
+        if (!item.classList.contains('drag-over')) {
             item.classList.add('drag-over');
         }
     }
@@ -464,36 +661,81 @@ class OLEDEnergyBandApp {
     handleDrop(e, targetItem) {
         e.preventDefault();
         e.stopPropagation();
+        
         const targetId = targetItem.dataset.id;
-
-        document.querySelectorAll('.layer-item').forEach(el => {
-            el.classList.remove('drag-over');
-            el.style.opacity = '';
-        });
-
-        if (!this.draggedLayerId || this.draggedLayerId === targetId) return;
+        
+        // 清除所有拖拽样式
+        this.clearDragStyles();
+        
+        if (!this.draggedLayerId || this.draggedLayerId === targetId) {
+            this.draggedLayerId = null;
+            return;
+        }
 
         const fromIndex = this.layers.findIndex(l => l.id === this.draggedLayerId);
         const toIndex = this.layers.findIndex(l => l.id === targetId);
-        if (fromIndex === -1 || toIndex === -1) return;
+        
+        if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+            this.draggedLayerId = null;
+            return;
+        }
 
+        // 执行移动
         const [movedLayer] = this.layers.splice(fromIndex, 1);
         this.layers.splice(toIndex, 0, movedLayer);
+        
         this.draggedLayerId = null;
+        this.draggedItem = null;
+        
         this.renderLayersList();
         this.render();
+        this.toast.show('层位置已更新', 'success');
     }
 
     handleDragEnd() {
+        this.clearDragStyles();
+        this.draggedLayerId = null;
+        this.draggedItem = null;
+    }
+    
+    clearDragStyles() {
         document.querySelectorAll('.layer-item').forEach(item => {
             item.classList.remove('dragging', 'drag-over');
             item.style.opacity = '';
+            item.style.transition = '';
         });
-        this.draggedLayerId = null;
     }
 
     handleDragLeave(e, item) {
         item.classList.remove('drag-over');
+    }
+
+    // ===== 能量计算工具方法 =====
+    calculateEnergyRange() {
+        let minEnergy = -2, maxEnergy = -8;
+        this.layers.forEach(layer => {
+            layer.materials.forEach(m => {
+                const mat = getMaterialById(m.id);
+                if (mat) {
+                    if (mat.homo) { 
+                        minEnergy = Math.max(minEnergy, mat.homo); 
+                        maxEnergy = Math.min(maxEnergy, mat.homo); 
+                    }
+                    if (mat.lumo) { 
+                        minEnergy = Math.max(minEnergy, mat.lumo); 
+                        maxEnergy = Math.min(maxEnergy, mat.lumo); 
+                    }
+                    if (mat.workFunction) { 
+                        minEnergy = Math.max(minEnergy, mat.workFunction); 
+                        maxEnergy = Math.min(maxEnergy, mat.workFunction); 
+                    }
+                }
+            });
+        });
+        // 添加一些边距
+        minEnergy += 0.5;
+        maxEnergy -= 0.5;
+        return { min: minEnergy, max: maxEnergy };
     }
 
     // 画布交互
@@ -544,7 +786,7 @@ class OLEDEnergyBandApp {
 
         if (this.layers.length === 0) {
             ctx.fillStyle = '#6b6b80';
-            ctx.font = '16px Inter, sans-serif';
+            ctx.font = `16px ${CONFIG.FONT_FAMILY}`;
             ctx.textAlign = 'center';
             ctx.fillText('添加器件层以生成能带图', width / 2, height / 2);
             return;
@@ -556,22 +798,14 @@ class OLEDEnergyBandApp {
 
         const totalWidth = this.layers.reduce((sum, l) => {
             const isElectrode = l.type === 'anode' || l.type === 'cathode';
-            return sum + (isElectrode ? 80 : Math.max(50, l.thickness * 1.0));
+            return sum + (isElectrode ? CONFIG.ELECTRODE_WIDTH : Math.max(CONFIG.ORGANIC_LAYER_MIN_WIDTH, l.thickness * CONFIG.THICKNESS_SCALE));
         }, 0);
-        const layerHeight = 280;
+        const layerHeight = CONFIG.LAYER_HEIGHT;
         const startX = -totalWidth / 2;
 
-        let minEnergy = -2, maxEnergy = -8;
-        this.layers.forEach(layer => {
-            layer.materials.forEach(m => {
-                const mat = getMaterialById(m.id);
-                if (mat) {
-                    if (mat.homo) { minEnergy = Math.max(minEnergy, mat.homo); maxEnergy = Math.min(maxEnergy, mat.homo); }
-                    if (mat.lumo) { minEnergy = Math.max(minEnergy, mat.lumo); maxEnergy = Math.min(maxEnergy, mat.lumo); }
-                    if (mat.workFunction) { minEnergy = Math.max(minEnergy, mat.workFunction); maxEnergy = Math.min(maxEnergy, mat.workFunction); }
-                }
-            });
-        });
+        const energyRange = this.calculateEnergyRange();
+        let minEnergy = energyRange.min;
+        let maxEnergy = energyRange.max;
 
         const energyToY = (energy) => {
             const range = minEnergy - maxEnergy;
@@ -584,7 +818,7 @@ class OLEDEnergyBandApp {
         let currentX = startX;
         this.layers.forEach((layer, index) => {
             const isElectrode = layer.type === 'anode' || layer.type === 'cathode';
-            const layerWidth = isElectrode ? 80 : Math.max(50, layer.thickness * 1.0);
+            const layerWidth = isElectrode ? CONFIG.ELECTRODE_WIDTH : Math.max(CONFIG.ORGANIC_LAYER_MIN_WIDTH, layer.thickness * CONFIG.THICKNESS_SCALE);
             const layerConfig = LAYER_TYPES[layer.type];
             const isSelected = layer.id === this.selectedLayerId;
             this.drawLayer(ctx, layer, currentX, layerWidth, layerHeight, energyToY, layerConfig, isSelected, index);
@@ -623,7 +857,7 @@ class OLEDEnergyBandApp {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.fill();
 
-        ctx.font = '11px Inter, sans-serif';
+        ctx.font = `11px ${CONFIG.FONT_FAMILY}`;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#a0a0b5';
@@ -687,7 +921,7 @@ class OLEDEnergyBandApp {
             const lineWidth = width - 8;
 
             // 功函数能级线
-            ctx.strokeStyle = '#f59e0b';
+            ctx.strokeStyle = CONFIG.COLORS.WORK_FUNCTION;
             ctx.lineWidth = 2.5;
             ctx.beginPath();
             ctx.moveTo(lineX, wfY);
@@ -697,7 +931,7 @@ class OLEDEnergyBandApp {
             // 材料名称写在能级线前面（左侧）- 不旋转
             if (this.settings.showMaterialName) {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                ctx.font = 'bold 10px Inter, sans-serif';
+                ctx.font = `bold 10px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
                 ctx.fillText(mainMat.name, centerX, wfY - 8);
@@ -705,8 +939,8 @@ class OLEDEnergyBandApp {
 
             // 功函数数值
             if (this.settings.showEnergyValues) {
-                ctx.fillStyle = '#f59e0b';
-                ctx.font = 'bold 9px Inter, sans-serif';
+                ctx.fillStyle = CONFIG.COLORS.WORK_FUNCTION;
+                ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText(`${mainMat.workFunction} eV`, centerX, wfY + 4);
@@ -715,7 +949,7 @@ class OLEDEnergyBandApp {
             // 厚度（在材料名称下方）
             if (this.settings.showThickness) {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                ctx.font = '9px Inter, sans-serif';
+                ctx.font = `9px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText(`${layer.thickness}nm`, centerX, wfY + 18);
@@ -742,26 +976,23 @@ class OLEDEnergyBandApp {
 
             // host HOMO/LUMO 线（比框短）
             ctx.lineWidth = 2;
-            ctx.strokeStyle = '#ef4444';
+            ctx.strokeStyle = CONFIG.COLORS.HOMO;
             ctx.beginPath();
             ctx.moveTo(x + 1.5, hostHomoY);
             ctx.lineTo(x + width - 1.5, hostHomoY);
             ctx.stroke();
 
-            ctx.strokeStyle = '#3b82f6';
+            ctx.strokeStyle = CONFIG.COLORS.LUMO;
             ctx.beginPath();
             ctx.moveTo(x + 1.5, hostLumoY);
             ctx.lineTo(x + width - 1.5, hostLumoY);
             ctx.stroke();
 
-            // host 名称显示在左侧边缘（如果有 dopant）
-            // (Host Name rendering moved to end of function)
-
             // host T1 能级
             if (this.settings.showTriplet && hostMat.t1) {
                 const t1Energy = hostMat.homo + hostMat.t1;
                 const t1Y = energyToY(t1Energy);
-                ctx.strokeStyle = '#8b5cf6';
+                ctx.strokeStyle = CONFIG.COLORS.TRIPLET;
                 ctx.lineWidth = 1.5;
                 ctx.setLineDash([3, 3]);
                 ctx.beginPath();
@@ -774,21 +1005,15 @@ class OLEDEnergyBandApp {
 
         // 在 host 大框内部绘制 dopant 小框
         if (dopantMats.length > 0) {
-            // Dopant 变窄且右对齐，留出左侧空间给 Host 名称
-            const dopantRatio = 0.65;
-            const rightPadding = 4;
-            const innerWidth = (width - 4) * dopantRatio;
-            const innerX = (x + width - 2) - rightPadding - innerWidth;
+            const innerWidth = (width - 4) * CONFIG.DOPANT_WIDTH_RATIO;
+            const innerX = (x + width - 2) - CONFIG.DOPANT_RIGHT_PADDING - innerWidth;
 
             dopantMats.forEach((dopant, di) => {
                 if (!dopant.homo || !dopant.lumo) return;
 
                 const dopantHomoY = energyToY(dopant.homo);
                 const dopantLumoY = energyToY(dopant.lumo);
-
-                // dopant 小框使用不同颜色区分
-                const dopantColors = ['#ec4899', '#a855f7', '#06b6d4']; // 粉色、紫色、青色
-                const dopantColor = dopant.color || dopantColors[di % dopantColors.length];
+                const dopantColor = dopant.color || CONFIG.COLORS.DOPANT_COLORS[di % CONFIG.COLORS.DOPANT_COLORS.length];
 
                 // 小框填充
                 ctx.fillStyle = this.hexToRgba(dopantColor, isSelected ? 0.45 : 0.3);
@@ -799,15 +1024,15 @@ class OLEDEnergyBandApp {
                 ctx.lineWidth = 1;
                 ctx.strokeRect(innerX, dopantLumoY, innerWidth, dopantHomoY - dopantLumoY);
 
-                // dopant HOMO/LUMO 线（比框短）
+                // dopant HOMO/LUMO 线
                 ctx.lineWidth = 2;
-                ctx.strokeStyle = '#ef4444';
+                ctx.strokeStyle = CONFIG.COLORS.HOMO;
                 ctx.beginPath();
                 ctx.moveTo(innerX + 1, dopantHomoY);
                 ctx.lineTo(innerX + innerWidth - 1, dopantHomoY);
                 ctx.stroke();
 
-                ctx.strokeStyle = '#3b82f6';
+                ctx.strokeStyle = CONFIG.COLORS.LUMO;
                 ctx.beginPath();
                 ctx.moveTo(innerX + 1, dopantLumoY);
                 ctx.lineTo(innerX + innerWidth - 1, dopantLumoY);
@@ -821,7 +1046,7 @@ class OLEDEnergyBandApp {
                     ctx.translate(dopantCenterX, dopantCenterY);
                     ctx.rotate(-Math.PI / 2);
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-                    ctx.font = 'bold 9px Inter, sans-serif';
+                    ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(dopant.name, 0, 0);
@@ -832,7 +1057,7 @@ class OLEDEnergyBandApp {
                 if (this.settings.showTriplet && dopant.t1) {
                     const t1Energy = dopant.homo + dopant.t1;
                     const t1Y = energyToY(t1Energy);
-                    ctx.strokeStyle = '#8b5cf6';
+                    ctx.strokeStyle = CONFIG.COLORS.TRIPLET;
                     ctx.lineWidth = 1.5;
                     ctx.setLineDash([3, 3]);
                     ctx.beginPath();
@@ -844,62 +1069,44 @@ class OLEDEnergyBandApp {
             });
         }
 
-        // 厚度（在材料名称下方）
+        // 厚度显示
         if (this.settings.showThickness && hostMat.homo && hostMat.lumo) {
             const fillCenterY = (energyToY(hostMat.homo) + energyToY(hostMat.lumo)) / 2;
-
-            // 如果有 dopant，厚度文字对齐到 dopant 框中间
             let textX = centerX;
             if (dopantMats.length > 0) {
-                const dopantRatio = 0.65;
-                const rightPadding = 4;
-                const innerWidth = (width - 4) * dopantRatio;
-                const innerX = (x + width - 2) - rightPadding - innerWidth;
+                const innerWidth = (width - 4) * CONFIG.DOPANT_WIDTH_RATIO;
+                const innerX = (x + width - 2) - CONFIG.DOPANT_RIGHT_PADDING - innerWidth;
                 textX = innerX + innerWidth / 2;
             }
 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.font = '9px Inter, sans-serif';
+            ctx.font = `9px ${CONFIG.FONT_FAMILY}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             ctx.fillText(`${layer.thickness}nm`, textX, fillCenterY + 8);
         }
 
-        // Host 名称显示 - 移到最后绘制以防遮挡
-        // 需要重新获取 hostHomoY/hostLumoY，或在此逻辑中重新计算
+        // Host 名称显示
         if (hostMat.homo && hostMat.lumo) {
             const hostHomoY = energyToY(hostMat.homo);
             const hostLumoY = energyToY(hostMat.lumo);
 
             if (this.settings.showMaterialName) {
                 if (dopantMats.length > 0) {
-                    // 有 dopant 时，host 名称显示在左侧留白区域中心
-                    // 左侧留白区域是从 x 到 innerX
-                    // innerX 定义在上面作用域，这里需要重新根据逻辑估算，或者简单地使用 x + width * 0.175 (大约是左侧35%的一半)
-                    // 更精确的做法：
-                    const dopantRatio = 0.65;
-                    const rightPadding = 6;
-                    const innerWidth = (width - 4) * dopantRatio;
-                    // const innerX = (x + width - 2) - rightPadding - innerWidth;
-                    // 左侧剩余空间宽度 = width - 4 - innerWidth - rightPadding (approx)
-                    // 实际上左侧留白是从 x+2 到 innerX
-
-                    const leftSpaceCenter = x + ((width - 4) * (1 - dopantRatio)) / 2;
-
+                    const leftSpaceCenter = x + ((width - 4) * (1 - CONFIG.DOPANT_WIDTH_RATIO)) / 2;
                     ctx.save();
                     ctx.translate(leftSpaceCenter, (hostHomoY + hostLumoY) / 2);
                     ctx.rotate(-Math.PI / 2);
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                    ctx.font = 'bold 9px Inter, sans-serif';
+                    ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(hostMat.name, 0, 0);
                     ctx.restore();
                 } else {
-                    // 没有 dopant 时居中显示
                     const fillCenterY = (hostHomoY + hostLumoY) / 2;
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                    ctx.font = 'bold 9px Inter, sans-serif';
+                    ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(hostMat.name, centerX, fillCenterY);
@@ -908,11 +1115,11 @@ class OLEDEnergyBandApp {
 
             if (this.settings.showEnergyValues) {
                 ctx.textBaseline = 'middle';
-                ctx.font = 'bold 9px Inter, sans-serif';
+                ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
-                ctx.fillStyle = '#ef4444';
+                ctx.fillStyle = CONFIG.COLORS.HOMO;
                 ctx.fillText(`${hostMat.homo} eV`, centerX, hostHomoY + 12);
-                ctx.fillStyle = '#3b82f6';
+                ctx.fillStyle = CONFIG.COLORS.LUMO;
                 ctx.fillText(`${hostMat.lumo} eV`, centerX, hostLumoY - 6);
             }
         }
@@ -936,38 +1143,38 @@ class OLEDEnergyBandApp {
             ctx.lineWidth = isSelected ? 2 : 1;
             ctx.strokeRect(x + 2, lumoY, width - 4, homoY - lumoY);
 
-            // HOMO/LUMO 线（比框短）
+            // HOMO/LUMO 线
             ctx.lineWidth = 2.5;
-            ctx.strokeStyle = '#ef4444';
+            ctx.strokeStyle = CONFIG.COLORS.HOMO;
             ctx.beginPath();
             ctx.moveTo(x + 1.5, homoY);
             ctx.lineTo(x + width - 1.5, homoY);
             ctx.stroke();
 
-            ctx.strokeStyle = '#3b82f6';
+            ctx.strokeStyle = CONFIG.COLORS.LUMO;
             ctx.beginPath();
             ctx.moveTo(x + 1.5, lumoY);
             ctx.lineTo(x + width - 1.5, lumoY);
             ctx.stroke();
 
-            // 材料名称 - 水平显示
+            // 材料名称
             if (this.settings.showMaterialName) {
                 const fillCenterY = (homoY + lumoY) / 2;
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                ctx.font = 'bold 10px Inter, sans-serif';
+                ctx.font = `bold 10px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(mat.name, centerX, fillCenterY);
             }
 
-            // 能级数值（水平居中）
+            // 能级数值
             if (this.settings.showEnergyValues) {
                 ctx.textBaseline = 'middle';
-                ctx.font = 'bold 9px Inter, sans-serif';
+                ctx.font = `bold 9px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
-                ctx.fillStyle = '#ef4444';
+                ctx.fillStyle = CONFIG.COLORS.HOMO;
                 ctx.fillText(`${mat.homo} eV`, centerX, homoY + 12);
-                ctx.fillStyle = '#3b82f6';
+                ctx.fillStyle = CONFIG.COLORS.LUMO;
                 ctx.fillText(`${mat.lumo} eV`, centerX, lumoY - 6);
             }
 
@@ -975,7 +1182,7 @@ class OLEDEnergyBandApp {
             if (this.settings.showTriplet && mat.t1 && layer.type === 'eml') {
                 const t1Energy = mat.homo + mat.t1;
                 const t1Y = energyToY(t1Energy);
-                ctx.strokeStyle = '#8b5cf6';
+                ctx.strokeStyle = CONFIG.COLORS.TRIPLET;
                 ctx.lineWidth = 1.5;
                 ctx.setLineDash([3, 3]);
                 ctx.beginPath();
@@ -985,11 +1192,11 @@ class OLEDEnergyBandApp {
                 ctx.setLineDash([]);
             }
 
-            // 厚度（在材料名称下方）
+            // 厚度
             if (this.settings.showThickness) {
                 const fillCenterY = (homoY + lumoY) / 2;
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                ctx.font = '9px Inter, sans-serif';
+                ctx.font = `9px ${CONFIG.FONT_FAMILY}`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText(`${layer.thickness}nm`, centerX, fillCenterY + 8);
@@ -1047,17 +1254,20 @@ class OLEDEnergyBandApp {
     }
 
     exportPNG() {
-        if (this.layers.length === 0) { alert('请先添加器件层'); return; }
+        if (this.layers.length === 0) { 
+            this.toast.show('请先添加器件层', 'warning'); 
+            return; 
+        }
 
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
         const padding = 20;
         const totalWidth = this.layers.reduce((sum, l) => {
             const isElectrode = l.type === 'anode' || l.type === 'cathode';
-            return sum + (isElectrode ? 60 : Math.max(40, l.thickness * 0.8));
+            return sum + (isElectrode ? CONFIG.ELECTRODE_WIDTH * 0.75 : Math.max(40, l.thickness * 0.8));
         }, 0);
 
-        const layerHeight = 280;
+        const layerHeight = CONFIG.LAYER_HEIGHT;
         const exportWidth = totalWidth + 100 + padding * 2;
         const exportHeight = layerHeight + 80 + padding * 2;
 
@@ -1065,17 +1275,9 @@ class OLEDEnergyBandApp {
         tempCanvas.height = exportHeight * 2;
         tempCtx.scale(2, 2);
 
-        let minEnergy = -2, maxEnergy = -8;
-        this.layers.forEach(layer => {
-            layer.materials.forEach(m => {
-                const mat = getMaterialById(m.id);
-                if (mat) {
-                    if (mat.homo) { minEnergy = Math.max(minEnergy, mat.homo); maxEnergy = Math.min(maxEnergy, mat.homo); }
-                    if (mat.lumo) { minEnergy = Math.max(minEnergy, mat.lumo); maxEnergy = Math.min(maxEnergy, mat.lumo); }
-                    if (mat.workFunction) { minEnergy = Math.max(minEnergy, mat.workFunction); maxEnergy = Math.min(maxEnergy, mat.workFunction); }
-                }
-            });
-        });
+        const energyRange = this.calculateEnergyRange();
+        let minEnergy = energyRange.min;
+        let maxEnergy = energyRange.max;
 
         const energyToY = (energy) => {
             const range = minEnergy - maxEnergy;
@@ -1091,7 +1293,7 @@ class OLEDEnergyBandApp {
         tempCtx.lineTo(axisX, energyToY(maxEnergy) + 5);
         tempCtx.stroke();
 
-        tempCtx.font = '10px Inter, sans-serif';
+        tempCtx.font = `10px ${CONFIG.FONT_FAMILY}`;
         tempCtx.textAlign = 'right';
         tempCtx.fillStyle = '#666666';
         for (let e = Math.floor(maxEnergy); e <= Math.ceil(minEnergy); e++) {
@@ -1324,15 +1526,18 @@ class OLEDEnergyBandApp {
     }
 
     exportSVG() {
-        if (this.layers.length === 0) { alert('请先添加器件层'); return; }
+        if (this.layers.length === 0) { 
+            this.toast.show('请先添加器件层', 'warning'); 
+            return; 
+        }
 
         const padding = 20;
         const totalWidth = this.layers.reduce((sum, l) => {
             const isElectrode = l.type === 'anode' || l.type === 'cathode';
-            return sum + (isElectrode ? 60 : Math.max(40, l.thickness * 0.8));
+            return sum + (isElectrode ? CONFIG.ELECTRODE_WIDTH * 0.75 : Math.max(40, l.thickness * 0.8));
         }, 0);
 
-        const layerHeight = 280;
+        const layerHeight = CONFIG.LAYER_HEIGHT;
         const width = totalWidth + 100 + padding * 2;
         const height = layerHeight + 80 + padding * 2;
 
@@ -1341,17 +1546,9 @@ class OLEDEnergyBandApp {
         // Add white background for better visibility (since export colors are dark)
         svgContent += `<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>`;
 
-        let minEnergy = -2, maxEnergy = -8;
-        this.layers.forEach(layer => {
-            layer.materials.forEach(m => {
-                const mat = getMaterialById(m.id);
-                if (mat) {
-                    if (mat.homo) { minEnergy = Math.max(minEnergy, mat.homo); maxEnergy = Math.min(maxEnergy, mat.homo); }
-                    if (mat.lumo) { minEnergy = Math.max(minEnergy, mat.lumo); maxEnergy = Math.min(maxEnergy, mat.lumo); }
-                    if (mat.workFunction) { minEnergy = Math.max(minEnergy, mat.workFunction); maxEnergy = Math.min(maxEnergy, mat.workFunction); }
-                }
-            });
-        });
+        const energyRange = this.calculateEnergyRange();
+        let minEnergy = energyRange.min;
+        let maxEnergy = energyRange.max;
 
         const energyToY = (energy) => {
             const range = minEnergy - maxEnergy;
@@ -1365,7 +1562,7 @@ class OLEDEnergyBandApp {
         for (let e = Math.floor(maxEnergy); e <= Math.ceil(minEnergy); e++) {
             const y = energyToY(e);
             svgContent += `<line x1="${axisX - 3}" y1="${y}" x2="${axisX + 3}" y2="${y}" stroke="rgba(100, 100, 100, 0.8)" stroke-width="1.5"/>`;
-            svgContent += `<text x="${axisX - 8}" y="${y + 3}" fill="#666666" font-family="Inter, sans-serif" font-size="10" text-anchor="end">${e} eV</text>`;
+            svgContent += `<text x="${axisX - 8}" y="${y + 3}" fill="#666666" font-family="${CONFIG.FONT_FAMILY}" font-size="10" text-anchor="end">${e} eV</text>`;
         }
 
         let currentX = axisX + 20;
@@ -1404,7 +1601,7 @@ class OLEDEnergyBandApp {
             const wfY = mainMat.workFunction ? energyToY(mainMat.workFunction) : null;
             if (wfY !== null) {
                 svg += `<line x1="${x + 3}" y1="${wfY}" x2="${x + width - 3}" y2="${wfY}" stroke="#f59e0b" stroke-width="2"/>`;
-                svg += `<text x="${centerX}" y="${wfY - 6}" fill="rgba(50, 50, 50, 0.9)" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle">${mainMat.name}</text>`;
+                svg += `<text x="${centerX}" y="${wfY - 6}" fill="rgba(50, 50, 50, 0.9)" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle">${mainMat.name}</text>`;
             }
         } else if (isEML) {
             const hostMat = materials.find(m => m.data.type === 'host')?.data || materials[0].data;
@@ -1440,27 +1637,27 @@ class OLEDEnergyBandApp {
                     svg += `<line x1="${innerX + 1}" y1="${dopantLumoY}" x2="${innerX + innerWidth - 1}" y2="${dopantLumoY}" stroke="#3b82f6" stroke-width="2"/>`;
 
                     // Dopant Name
-                    svg += `<text x="${innerX + innerWidth / 2}" y="${(dopantHomoY + dopantLumoY) / 2}" fill="rgba(50, 50, 50, 0.9)" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90, ${innerX + innerWidth / 2}, ${(dopantHomoY + dopantLumoY) / 2})">${dopant.name}</text>`;
+                    svg += `<text x="${innerX + innerWidth / 2}" y="${(dopantHomoY + dopantLumoY) / 2}" fill="rgba(50, 50, 50, 0.9)" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90, ${innerX + innerWidth / 2}, ${(dopantHomoY + dopantLumoY) / 2})">${dopant.name}</text>`;
                 });
 
                 // Host Name (Left Space)
                 const leftSpaceCenter = x + ((width - 4) * (1 - dopantRatio)) / 2;
-                svg += `<text x="${leftSpaceCenter}" y="${(hostHomoY + hostLumoY) / 2}" fill="rgba(50, 50, 50, 0.9)" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90, ${leftSpaceCenter}, ${(hostHomoY + hostLumoY) / 2})">${hostMat.name}</text>`;
+                svg += `<text x="${leftSpaceCenter}" y="${(hostHomoY + hostLumoY) / 2}" fill="rgba(50, 50, 50, 0.9)" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90, ${leftSpaceCenter}, ${(hostHomoY + hostLumoY) / 2})">${hostMat.name}</text>`;
 
             } else {
                 // Host Name (Center)
-                svg += `<text x="${centerX}" y="${(hostHomoY + hostLumoY) / 2 + 3}" fill="rgba(50, 50, 50, 0.9)" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${hostMat.name}</text>`;
+                svg += `<text x="${centerX}" y="${(hostHomoY + hostLumoY) / 2 + 3}" fill="rgba(50, 50, 50, 0.9)" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${hostMat.name}</text>`;
             }
 
-            svg += `<text x="${centerX}" y="${hostHomoY + 12}" fill="#ef4444" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${hostMat.homo} eV</text>`;
-            svg += `<text x="${centerX}" y="${hostLumoY - 6}" fill="#3b82f6" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${hostMat.lumo} eV</text>`;
+            svg += `<text x="${centerX}" y="${hostHomoY + 12}" fill="#ef4444" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${hostMat.homo} eV</text>`;
+            svg += `<text x="${centerX}" y="${hostLumoY - 6}" fill="#3b82f6" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${hostMat.lumo} eV</text>`;
 
         } else if (mainMat.workFunction && !mainMat.homo) {
             // LiF like
             const wfY = energyToY(mainMat.workFunction);
             svg += `<line x1="${x + 1.5}" y1="${wfY}" x2="${x + width - 1.5}" y2="${wfY}" stroke="#f59e0b" stroke-width="2.5"/>`;
-            svg += `<text x="${centerX}" y="${wfY - 8}" fill="rgba(50, 50, 50, 0.9)" font-family="Inter, sans-serif" font-weight="bold" font-size="10" text-anchor="middle" dominant-baseline="auto">${mainMat.name}</text>`;
-            svg += `<text x="${centerX}" y="${wfY + 4}" fill="#f59e0b" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="hanging">${mainMat.workFunction} eV</text>`;
+            svg += `<text x="${centerX}" y="${wfY - 8}" fill="rgba(50, 50, 50, 0.9)" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="10" text-anchor="middle" dominant-baseline="auto">${mainMat.name}</text>`;
+            svg += `<text x="${centerX}" y="${wfY + 4}" fill="#f59e0b" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="hanging">${mainMat.workFunction} eV</text>`;
         } else {
             const homoY = energyToY(mainMat.homo);
             const lumoY = energyToY(mainMat.lumo);
@@ -1471,14 +1668,14 @@ class OLEDEnergyBandApp {
             svg += `<line x1="${x + 1}" y1="${homoY}" x2="${x + width - 1}" y2="${homoY}" stroke="#ef4444" stroke-width="2.5"/>`;
             svg += `<line x1="${x + 1}" y1="${lumoY}" x2="${x + width - 1}" y2="${lumoY}" stroke="#3b82f6" stroke-width="2.5"/>`;
 
-            svg += `<text x="${centerX}" y="${(homoY + lumoY) / 2}" fill="rgba(50, 50, 50, 0.9)" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${mainMat.name}</text>`;
+            svg += `<text x="${centerX}" y="${(homoY + lumoY) / 2}" fill="rgba(50, 50, 50, 0.9)" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${mainMat.name}</text>`;
 
-            svg += `<text x="${centerX}" y="${homoY + 12}" fill="#ef4444" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${mainMat.homo} eV</text>`;
-            svg += `<text x="${centerX}" y="${lumoY - 6}" fill="#3b82f6" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${mainMat.lumo} eV</text>`;
+            svg += `<text x="${centerX}" y="${homoY + 12}" fill="#ef4444" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${mainMat.homo} eV</text>`;
+            svg += `<text x="${centerX}" y="${lumoY - 6}" fill="#3b82f6" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="middle">${mainMat.lumo} eV</text>`;
         }
 
         // Layer Label
-        svg += `<text x="${centerX}" y="${padding + 25}" fill="${layerConfig.color}" font-family="Inter, sans-serif" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="auto">${layerConfig.shortName}</text>`;
+        svg += `<text x="${centerX}" y="${padding + 25}" fill="${layerConfig.color}" font-family="${CONFIG.FONT_FAMILY}" font-weight="bold" font-size="9" text-anchor="middle" dominant-baseline="auto">${layerConfig.shortName}</text>`;
 
         // Thickness
         let thickX = centerX;
@@ -1490,7 +1687,7 @@ class OLEDEnergyBandApp {
             thickX = innerX + innerWidth / 2;
         }
 
-        svg += `<text x="${thickX}" y="${padding + height + 55}" fill="rgba(50, 50, 50, 0.8)" font-family="Inter, sans-serif" font-size="9" text-anchor="middle" dominant-baseline="hanging">${layer.thickness}nm</text>`;
+        svg += `<text x="${thickX}" y="${padding + height + 55}" fill="rgba(50, 50, 50, 0.8)" font-family="${CONFIG.FONT_FAMILY}" font-size="9" text-anchor="middle" dominant-baseline="hanging">${layer.thickness}nm</text>`;
 
         return svg;
     }
@@ -1511,17 +1708,43 @@ class OLEDEnergyBandApp {
         link.href = url;
         link.click();
         URL.revokeObjectURL(url);
+        
+        this.toast.show('配置已保存', 'success');
     }
 
     loadConfig(e) {
         const file = e.target.files[0];
         if (!file) return;
 
+        // 验证文件类型
+        if (!file.name.endsWith('.json')) {
+            this.toast.show('请选择 JSON 格式的配置文件', 'error');
+            e.target.value = '';
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
                 const config = JSON.parse(event.target.result);
-                if (config.layers) this.layers = config.layers;
+                
+                // Schema 验证
+                if (!config.layers || !Array.isArray(config.layers)) {
+                    throw new Error('配置文件中缺少 layers 数组');
+                }
+                if (config.version && !/^\d+\.\d+$/.test(config.version)) {
+                    throw new Error('配置文件版本号格式错误');
+                }
+
+                // 验证每一层的结构
+                config.layers.forEach((layer, index) => {
+                    if (!layer.id || !layer.type || !Array.isArray(layer.materials)) {
+                        throw new Error(`第 ${index + 1} 层数据格式错误`);
+                    }
+                });
+
+                // 应用配置
+                this.layers = config.layers;
                 if (config.settings) {
                     this.settings = { ...this.settings, ...config.settings };
                     Object.keys(this.settings).forEach(key => {
@@ -1534,14 +1757,20 @@ class OLEDEnergyBandApp {
                 }
 
                 this.selectedLayerId = null;
+                this.zoom = 1;
+                this.panX = 0;
+                this.panY = 0;
                 this.renderLayersList();
                 this.renderLayerDetail();
                 this.renderMaterialsList('all');
                 this.render();
-                alert('配置导入成功！');
+                this.toast.show(`配置导入成功！共 ${config.layers.length} 层`, 'success');
             } catch (err) {
-                alert('配置文件格式错误：' + err.message);
+                this.toast.show('配置导入失败：' + err.message, 'error');
             }
+        };
+        reader.onerror = () => {
+            this.toast.show('文件读取失败', 'error');
         };
         reader.readAsText(file);
         e.target.value = '';

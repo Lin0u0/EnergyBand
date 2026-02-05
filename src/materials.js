@@ -3,6 +3,8 @@ export const MATERIALS_DATABASE = {
     // 电极材料
     electrodes: [
         { id: 'ito', name: 'ITO', fullName: '氧化铟锡', workFunction: -4.7, type: 'electrode', category: 'electrode', color: '#f59e0b' },
+        { id: 'ph1000', name: 'PH1000', fullName: 'PEDOT:PSS (PH1000)', workFunction: -4.9, type: 'electrode', category: 'electrode', color: '#3b82f6' },
+        { id: 'pedot_pss_el', name: 'PEDOT:PSS', fullName: '聚噻吩-聚苯乙烯磺酸盐', workFunction: -5.0, type: 'electrode', category: 'electrode', color: '#2563eb' },
         { id: 'al', name: 'Al', fullName: '铝', workFunction: -4.3, type: 'electrode', category: 'electrode', color: '#6b7280' },
         { id: 'ag', name: 'Ag', fullName: '银', workFunction: -4.6, type: 'electrode', category: 'electrode', color: '#9ca3af' },
         { id: 'au', name: 'Au', fullName: '金', workFunction: -5.1, type: 'electrode', category: 'electrode', color: '#fbbf24' },
