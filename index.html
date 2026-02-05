@@ -105,11 +105,15 @@
                     </div>
                 </div>
 
-                <div class="panel">
-                    <div class="panel-header">
+                <div class="panel panel-collapsible">
+                    <div class="panel-header panel-header-collapsible" data-target="materialsPanelContent">
                         <h2>材料库</h2>
-                        <input type="text" class="search-input" id="materialSearch" placeholder="搜索材料...">
+                        <svg class="collapse-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6,9 12,15 18,9"/>
+                        </svg>
                     </div>
+                    <div class="panel-content" id="materialsPanelContent">
+                        <input type="text" class="search-input" id="materialSearch" placeholder="搜索材料...">
                     <div class="material-categories">
                         <button class="category-btn active" data-category="all">全部</button>
                         <button class="category-btn" data-category="hil">HIL</button>
@@ -124,17 +128,18 @@
                     <div class="materials-list" id="materialsList">
                         <!-- 动态生成的材料列表 -->
                     </div>
+                    </div>
                 </div>
 
-                <div class="panel">
-                    <div class="panel-header">
+                <div class="panel panel-collapsible">
+                    <div class="panel-header panel-header-collapsible" data-target="settingsPanelContent">
                         <h2>显示设置</h2>
+                        <svg class="collapse-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6,9 12,15 18,9"/>
+                        </svg>
                     </div>
+                    <div class="panel-content" id="settingsPanelContent">
                     <div class="settings-content">
-                        <label class="setting-item">
-                            <span>显示功函数/电子亲和能</span>
-                            <input type="checkbox" id="showWorkFunction" checked>
-                        </label>
                         <label class="setting-item">
                             <span>显示材料名称</span>
                             <input type="checkbox" id="showMaterialName" checked>
@@ -145,16 +150,17 @@
                         </label>
                         <label class="setting-item">
                             <span>显示层厚度</span>
-                            <input type="checkbox" id="showThickness" checked>
+                            <input type="checkbox" id="showThickness">
                         </label>
                         <label class="setting-item">
                             <span>显示三线态能级 (T₁)</span>
-                            <input type="checkbox" id="showTriplet" checked>
+                            <input type="checkbox" id="showTriplet">
                         </label>
                         <label class="setting-item">
                             <span>真空能级对齐</span>
                             <input type="checkbox" id="vacuumAlign">
                         </label>
+                    </div>
                     </div>
                 </div>
             </aside>

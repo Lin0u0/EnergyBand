@@ -80,11 +80,10 @@ class OLEDEnergyBandApp {
         this.eventListeners = new Map(); // 用于存储动态绑定的事件监听器
 
         this.settings = {
-            showWorkFunction: true,
             showMaterialName: true,
             showEnergyValues: true,
-            showThickness: true,
-            showTriplet: true,
+            showThickness: false,
+            showTriplet: false,
             vacuumAlign: false,
         };
 
@@ -94,6 +93,18 @@ class OLEDEnergyBandApp {
         this.initTheme();
 
         this.init();
+    }
+
+    // ===== Panel Collapse Management =====
+    restorePanelCollapseState() {
+        document.querySelectorAll('.panel-header-collapsible').forEach(header => {
+            const targetId = header.dataset.target;
+            const isCollapsed = localStorage.getItem(`panel_${targetId}_collapsed`) === 'true';
+            const panel = header.closest('.panel-collapsible');
+            if (panel && isCollapsed) {
+                panel.classList.add('collapsed');
+            }
+        });
     }
 
     // ===== Theme Management =====
@@ -181,6 +192,26 @@ class OLEDEnergyBandApp {
         // 主题切换
         document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
 
+        // 面板折叠功能
+        document.querySelectorAll('.panel-header-collapsible').forEach(header => {
+            header.addEventListener('click', (e) => {
+                // 如果点击的是内部的输入框或按钮，不触发折叠
+                if (e.target.closest('input, button, .search-input')) return;
+                
+                const targetId = header.dataset.target;
+                const panel = header.closest('.panel-collapsible');
+                if (panel) {
+                    panel.classList.toggle('collapsed');
+                    // 保存折叠状态到 localStorage
+                    const isCollapsed = panel.classList.contains('collapsed');
+                    localStorage.setItem(`panel_${targetId}_collapsed`, isCollapsed);
+                }
+            });
+        });
+
+        // 恢复面板折叠状态
+        this.restorePanelCollapseState();
+
         // 一次性绑定的事件
         document.getElementById('addLayer').addEventListener('click', () => this.openAddLayerModal());
         document.getElementById('confirmAddLayer').addEventListener('click', () => this.addLayerFromModal());
@@ -210,7 +241,7 @@ class OLEDEnergyBandApp {
             this.renderMaterialsList(activeCategory, e.target.value);
         }, 150));
 
-        ['showWorkFunction', 'showMaterialName', 'showEnergyValues', 'showThickness', 'showTriplet', 'vacuumAlign'].forEach(id => {
+        ['showMaterialName', 'showEnergyValues', 'showThickness', 'showTriplet', 'vacuumAlign'].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
                 el.addEventListener('change', (e) => {
